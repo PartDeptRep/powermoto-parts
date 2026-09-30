@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Power Motorcycles USA Parts</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#d32f2f">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <style>
+        :root { --primary: #d32f2f; --dark: #212121; --light: #f5f5f5; --border: #e0e0e0; }
+        body { font-family: -apple-system, sans-serif; margin: 0; background: var(--light); color: var(--dark); }
+        header { background: var(--dark); color: white; padding: 1.5rem; text-align: center; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 2rem 1rem; display: flex; flex-wrap: wrap; gap: 2rem; }
+        .main-content { flex: 1 1 60%; }
+        .sidebar { flex: 1 1 30%; background: white; padding: 1.5rem; border-radius: 8px; position: sticky; top: 2rem; height: fit-content;}
+        .controls { display: flex; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; }
+        input, button { padding: 0.75rem; border: 1px solid var(--border); border-radius: 4px; font-size: 1rem; }
+        input { flex: 1; min-width: 200px; }
+        .btn { background: var(--primary); color: white; border: none; cursor: pointer; font-weight: bold; width: 100%; transition: 0.2s;}
+        .btn:hover { background: #b71c1c; }
+        .products { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 1.5rem; }
+        .product-card { background: white; border-radius: 8px; padding: 1.5rem; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .product-image { width: 100%; height: 180px; object-fit: contain; border-radius: 4px; margin-bottom: 1rem; background: white;}
+        .product-brand { font-size: 0.8rem; color: var(--primary); font-weight: bold; text-transform: uppercase;}
+        .product-notes { font-size: 0.85rem; color: #666; margin-bottom: 1rem; min-height: 2.5em;}
+        .price { font-size: 1.25rem; font-weight: bold; margin-bottom: 1rem; }
+        .cart-item { display: flex; justify-content: space-between; border-bottom: 1px solid var(--border); padding: 1rem 0; }
+        #loading { text-align: center; font-size: 1.2rem; color: #666; padding: 2rem; }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>Power Motorcycles USA</h1>
+    <p>Premium components plus aftermarket options for BMW, Ducati, and Indian</p>
+</header>
+
+<div class="container">
+    <div class="main-content">
+        <div class="controls">
+            <input type="text" id="searchInput" placeholder="Search by part name or number..." onkeyup="filterProducts()">
+        </div>
+        <div id="loading">Loading inventory catalog...</div>
+        <div class="products" id="productGrid"></div>
+    </div>
+
+    <div class="sidebar">
+        <h2>Your Request</h2>
+        <div id="cartItems"><p>List is empty.</p></div>
+        <div class="price" id="cartTotal" style="margin-top: 1rem;">Total: $0.00</div>
+        <p style="font-size: 0.85rem; color: #666;">Weekend orders: allow 48hrs.<br>BMW (Germany): 2-2.5 wks.<br>Ducati (Italy): 7-10 days.</p>
+        <button class="btn" onclick="sendOrderRequest()">Send Order Request</button>
+        <p style="font-size: 0.75rem; text-align:center; color:#888; margin-top:0.5rem;">Routes to (321) 215-2065 or Email depending on device.</p>
+    </div>
+</div>
+
+<script>
+    let inventory = [];
+    let cart = [];
+
+    // Automatically parse the CSV file when the page loads
+    Papa.parse("inventory.csv", {
+        download: true,
+        header: true,
+        skipEmptyLines: true,
+        complete: function(results) {
+            document.getElementById('loading').style.display = 'none';
+            // Filter out empty rows and prices that are 0
+            inventory = results.data.filter(item => item['Price'] && parseFloat(item['Price']) > 0);
+            renderProducts(inventory.slice(0, 50)); // Render first 50 to keep it fast
+        }
+    });
+
+    function renderProducts(products) {
+        const grid = document.getElementById('productGrid');
+        grid.innerHTML = '';
+        products.forEach((item, index) => {
+            const img = item['Image URL'] || 'https://via.placeholder.com/250x180?text=No+Image';
+            const notes = item['Notes'] || item['Description'] || 'No additional notes.';
+            const brand = item['Source'] || 'Aftermarket';
+            const price = parseFloat(item['Price']).toFixed(2);
+            
+            grid.innerHTML += `
+                <div class="product-card">
+                    <img src="${img}" class="product-image" alt="Part Image">
+                    <div class="product-brand">${brand} - ${item['Part Number'] || ''}</div>
+                    <h3>${item['Description'] || 'Motorcycle Part'}</h3>
+                    <div class="product-notes">${notes}</div>
+                    <div class="price">$${price}</div>
+                    <button class="btn" onclick="addToCart(${index})">Add to Request</button>
+                </div>
+            `;
+        });
+    }
+
+    function filterProducts() {
+        const query = document.getElementById('searchInput').value.toLowerCase();
+        if(query.length < 2) return; // Wait until 2 characters are typed to search
+        
+        const filtered = inventory.filter(item => {
+            return (item['Description'] && item['Description'].toLowerCase().includes(query)) || 
+                   (item['Part Number'] && item['Part Number'].toLowerCase().includes(query)) ||
+                   (item['Notes'] && item['Notes'].toLowerCase().includes(query));
+        });
+        renderProducts(filtered.slice(0, 50));
+    }
+
+    function addToCart(index) {
+        const item = inventory[index];
+        cart.push(item);
+        updateCart();
+    }
+
+    function updateCart() {
+        const container = document.getElementById('cartItems');
+        let html = '';
+        let total = 0;
+        cart.forEach((item, i) => {
+            const price = parseFloat(item['Price']);
+            total += price;
+            html += `
+                <div class="cart-item">
+                    <div><b>${item['Part Number'] || ''}</b><br>${item['Description']}</div>
+                    <div>$${price.toFixed(2)} <br><button onclick="cart.splice(${i}, 1); updateCart();" style="border:none; background:none; color:red; cursor:pointer;">Remove</button></div>
+                </div>
+            `;
+        });
+        container.innerHTML = html || '<p>List is empty.</p>';
+        document.getElementById('cartTotal').innerText = 'Total: $' + total.toFixed(2);
+    }
+
+    function sendOrderRequest() {
+        if (cart.length === 0) return alert("Your cart is empty!");
+        let details = 'Hello Power Motorcycles USA, order request:%0A%0A';
+        let total = 0;
+        cart.forEach(item => {
+            details += `- P/N: ${item['Part Number']} | ${item['Description']} ($${parseFloat(item['Price']).toFixed(2)})%0A`;
+            total += parseFloat(item['Price']);
+        });
+        details += `%0ATotal: $${total.toFixed(2)}%0A`;
+        
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry/i.test(navigator.userAgent);
+        if (isMobile) window.location.href = `sms:3212152065?body=${details}`;
+        else window.location.href = `mailto:nicholas@powermotorcyclesusa.com?subject=Order Request&body=${details}`;
+    }
+
+    // Register Service Worker for the PWA App functionality
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('sw.js');
+    }
+</script>
+</body>
+</html>
