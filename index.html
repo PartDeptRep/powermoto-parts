@@ -14,17 +14,28 @@
         .container { max-width: 1200px; margin: 0 auto; padding: 2rem 1rem; display: flex; flex-wrap: wrap; gap: 2rem; }
         .main-content { flex: 1 1 60%; }
         .sidebar { flex: 1 1 30%; background: white; padding: 1.5rem; border-radius: 8px; position: sticky; top: 2rem; height: fit-content;}
+        
         .controls { display: flex; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; }
-        input, button { padding: 0.75rem; border: 1px solid var(--border); border-radius: 4px; font-size: 1rem; }
+        input, select, button { padding: 0.75rem; border: 1px solid var(--border); border-radius: 4px; font-size: 1rem; }
         input { flex: 1; min-width: 200px; }
+        select { min-width: 150px; background: white; }
         .btn { background: var(--primary); color: white; border: none; cursor: pointer; font-weight: bold; width: 100%; transition: 0.2s;}
         .btn:hover { background: #b71c1c; }
+        
+        /* Home Page Categories */
+        .category-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+        .category-card { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 1.5rem 1rem; text-align: center; cursor: pointer; font-weight: bold; transition: 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .category-card:hover { border-color: var(--primary); color: var(--primary); transform: translateY(-2px); }
+        .section-title { margin-top: 0; border-bottom: 2px solid var(--border); padding-bottom: 0.5rem; margin-bottom: 1.5rem; }
+        
         .products { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 1.5rem; }
-        .product-card { background: white; border-radius: 8px; padding: 1.5rem; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .product-card { background: white; border-radius: 8px; padding: 1.5rem; box-shadow: 0 2px 8px rgba(0,0,0,0.1); display: flex; flex-direction: column;}
         .product-image { width: 100%; height: 180px; object-fit: contain; border-radius: 4px; margin-bottom: 1rem; background: white;}
         .product-brand { font-size: 0.8rem; color: var(--primary); font-weight: bold; text-transform: uppercase;}
-        .product-notes { font-size: 0.85rem; color: #666; margin-bottom: 1rem; min-height: 2.5em;}
+        .product-title { margin: 0.5rem 0; font-size: 1.1rem; }
+        .product-notes { font-size: 0.85rem; color: #666; margin-bottom: 1rem; flex-grow: 1;}
         .price { font-size: 1.25rem; font-weight: bold; margin-bottom: 1rem; }
+        
         .cart-item { display: flex; justify-content: space-between; border-bottom: 1px solid var(--border); padding: 1rem 0; }
         #loading { text-align: center; font-size: 1.2rem; color: #666; padding: 2rem; }
     </style>
@@ -38,9 +49,27 @@
 
 <div class="container">
     <div class="main-content">
+        
+        <!-- Category Quick Links -->
+        <h2 class="section-title">Shop by Category</h2>
+        <div class="category-grid">
+            <div class="category-card" onclick="setCategory('brake')">Brakes</div>
+            <div class="category-card" onclick="setCategory('filter')">Filters & Oil</div>
+            <div class="category-card" onclick="setCategory('exhaust')">Exhaust</div>
+            <div class="category-card" onclick="setCategory('tire')">Tires</div>
+            <div class="category-card" onclick="setCategory('jacket')">Apparel</div>
+            <div class="category-card" onclick="setCategory('')">View All</div>
+        </div>
+
+        <h2 class="section-title">Parts Catalog</h2>
         <div class="controls">
             <input type="text" id="searchInput" placeholder="Search by part name or number..." onkeyup="filterProducts()">
+            <select id="supplierFilter" onchange="filterProducts()">
+                <option value="All">All Suppliers</option>
+                <!-- Populated dynamically by JS -->
+            </select>
         </div>
+        
         <div id="loading">Loading inventory catalog...</div>
         <div class="products" id="productGrid"></div>
     </div>
@@ -59,56 +88,116 @@
     let inventory = [];
     let cart = [];
 
-    // Automatically parse the CSV file when the page loads
+    // Map common supplier codes to readable names (Optional)
+    const supplierNames = {
+        'BM': 'BMW',
+        'DU': 'Ducati',
+        'IND': 'Indian',
+        'PO': 'Polaris',
+        'PU': 'Parts Unlimited'
+    };
+
     Papa.parse("inventory.csv", {
         download: true,
         header: true,
         skipEmptyLines: true,
         complete: function(results) {
             document.getElementById('loading').style.display = 'none';
-            // Filter out empty rows and prices that are 0
-            inventory = results.data.filter(item => item['Price'] && parseFloat(item['Price']) > 0);
-            renderProducts(inventory.slice(0, 50)); // Render first 50 to keep it fast
+            
+            // Filter valid items and assign permanent IDs
+            inventory = results.data
+                .filter(item => item['Price'] && parseFloat(item['Price']) > 0)
+                .map((item, index) => {
+                    item.id = index; 
+                    return item;
+                });
+            
+            // Extract unique suppliers for the dropdown
+            const suppliers = [...new Set(inventory.map(item => item['Source']).filter(Boolean))].sort();
+            const supplierSelect = document.getElementById('supplierFilter');
+            suppliers.forEach(supplier => {
+                const displayName = supplierNames[supplier] || supplier;
+                supplierSelect.innerHTML += `<option value="${supplier}">${displayName}</option>`;
+            });
+                
+            renderProducts(inventory.slice(0, 40)); 
         }
     });
 
     function renderProducts(products) {
         const grid = document.getElementById('productGrid');
         grid.innerHTML = '';
-        products.forEach((item, index) => {
+        
+        if(products.length === 0) {
+            grid.innerHTML = '<p>No parts found matching your criteria.</p>';
+            return;
+        }
+
+        products.forEach(item => {
             const img = item['Image URL'] || 'https://via.placeholder.com/250x180?text=No+Image';
-            const notes = item['Notes'] || item['Description'] || 'No additional notes.';
-            const brand = item['Source'] || 'Aftermarket';
+            const notes = item['Notes'] || '';
+            const rawSource = item['Source'] || 'Aftermarket';
+            const brand = supplierNames[rawSource] || rawSource;
             const price = parseFloat(item['Price']).toFixed(2);
             
             grid.innerHTML += `
                 <div class="product-card">
                     <img src="${img}" class="product-image" alt="Part Image">
-                    <div class="product-brand">${brand} - ${item['Part Number'] || ''}</div>
-                    <h3>${item['Description'] || 'Motorcycle Part'}</h3>
+                    <div class="product-brand">${brand} | PN: ${item['Part Number'] || 'N/A'}</div>
+                    <h3 class="product-title">${item['Description'] || 'Motorcycle Part'}</h3>
                     <div class="product-notes">${notes}</div>
                     <div class="price">$${price}</div>
-                    <button class="btn" onclick="addToCart(${index})">Add to Request</button>
+                    <button class="btn" onclick="addToCart(${item.id})">Add to Request</button>
                 </div>
             `;
         });
     }
 
-    function filterProducts() {
-        const query = document.getElementById('searchInput').value.toLowerCase();
-        if(query.length < 2) return; // Wait until 2 characters are typed to search
-        
-        const filtered = inventory.filter(item => {
-            return (item['Description'] && item['Description'].toLowerCase().includes(query)) || 
-                   (item['Part Number'] && item['Part Number'].toLowerCase().includes(query)) ||
-                   (item['Notes'] && item['Notes'].toLowerCase().includes(query));
-        });
-        renderProducts(filtered.slice(0, 50));
+    function setCategory(keyword) {
+        document.getElementById('searchInput').value = keyword;
+        document.getElementById('supplierFilter').value = 'All'; // Reset supplier
+        filterProducts();
     }
 
-    function addToCart(index) {
-        const item = inventory[index];
-        cart.push(item);
+    function filterProducts() {
+        const query = document.getElementById('searchInput').value.toLowerCase();
+        const supplier = document.getElementById('supplierFilter').value;
+        
+        // Show everything if search is empty and supplier is "All", otherwise filter
+        if(query === '' && supplier === 'All') {
+            renderProducts(inventory.slice(0, 40));
+            return;
+        }
+        
+        const filtered = inventory.filter(item => {
+            const matchesSearch = 
+                (item['Description'] && item['Description'].toLowerCase().includes(query)) || 
+                (item['Part Number'] && item['Part Number'].toLowerCase().includes(query)) ||
+                (item['Notes'] && item['Notes'].toLowerCase().includes(query));
+                
+            const matchesSupplier = supplier === 'All' || item['Source'] === supplier;
+            
+            return matchesSearch && matchesSupplier;
+        });
+        
+        // Limit results to keep the app fast on mobile
+        renderProducts(filtered.slice(0, 100));
+    }
+
+    function addToCart(id) {
+        const item = inventory.find(i => i.id === id);
+        const existing = cart.find(i => i.id === id);
+        
+        if (existing) {
+            existing.qty = (existing.qty || 1) + 1;
+        } else {
+            cart.push({ ...item, qty: 1 });
+        }
+        updateCart();
+    }
+
+    function removeFromCart(id) {
+        cart = cart.filter(item => item.id !== id);
         updateCart();
     }
 
@@ -116,38 +205,54 @@
         const container = document.getElementById('cartItems');
         let html = '';
         let total = 0;
-        cart.forEach((item, i) => {
+        
+        cart.forEach(item => {
             const price = parseFloat(item['Price']);
-            total += price;
+            const qty = item.qty || 1;
+            total += (price * qty);
+            
             html += `
                 <div class="cart-item">
-                    <div><b>${item['Part Number'] || ''}</b><br>${item['Description']}</div>
-                    <div>$${price.toFixed(2)} <br><button onclick="cart.splice(${i}, 1); updateCart();" style="border:none; background:none; color:red; cursor:pointer;">Remove</button></div>
+                    <div><b>${qty}x ${item['Part Number'] || ''}</b><br>${item['Description']}</div>
+                    <div style="text-align:right;">$${(price * qty).toFixed(2)} <br><button onclick="removeFromCart(${item.id})" style="border:none; background:none; color:red; cursor:pointer; padding:0; margin-top:0.5rem;">Remove</button></div>
                 </div>
             `;
         });
+        
         container.innerHTML = html || '<p>List is empty.</p>';
         document.getElementById('cartTotal').innerText = 'Total: $' + total.toFixed(2);
     }
 
     function sendOrderRequest() {
         if (cart.length === 0) return alert("Your cart is empty!");
-        let details = 'Hello Power Motorcycles USA, order request:%0A%0A';
-        let total = 0;
-        cart.forEach(item => {
-            details += `- P/N: ${item['Part Number']} | ${item['Description']} ($${parseFloat(item['Price']).toFixed(2)})%0A`;
-            total += parseFloat(item['Price']);
-        });
-        details += `%0ATotal: $${total.toFixed(2)}%0A`;
         
-        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry/i.test(navigator.userAgent);
-        if (isMobile) window.location.href = `sms:3212152065?body=${details}`;
-        else window.location.href = `mailto:nicholas@powermotorcyclesusa.com?subject=Order Request&body=${details}`;
+        let details = 'Hello Power Motorcycles USA, order request:\n\n';
+        let total = 0;
+        
+        cart.forEach(item => {
+            const qty = item.qty || 1;
+            details += `- ${qty}x P/N: ${item['Part Number']} | ${item['Description']} ($${(parseFloat(item['Price']) * qty).toFixed(2)})\n`;
+            total += parseFloat(item['Price']) * qty;
+        });
+        
+        details += `\nTotal: $${total.toFixed(2)}\n`;
+        
+        const encodedDetails = encodeURIComponent(details);
+        const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+        
+        const isIOS = /iPad|iPhone|iPod/.test(userAgent) && !window.MSStream;
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry/i.test(userAgent);
+        
+        if (isMobile) {
+            const separator = isIOS ? '&' : '?';
+            window.location.href = `sms:3212152065${separator}body=${encodedDetails}`;
+        } else {
+            window.location.href = `mailto:nicholas@powermotorcyclesusa.com?subject=Parts%20Order%20Request&body=${encodedDetails}`;
+        }
     }
 
-    // Register Service Worker for the PWA App functionality
     if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('sw.js');
+        navigator.serviceWorker.register('sw.js').catch(err => console.log('SW registration failed:', err));
     }
 </script>
 </body>
