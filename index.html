@@ -80,7 +80,10 @@
         <div id="cartItems"><p>List is empty.</p></div>
         <div class="price" id="cartTotal" style="margin-top: 1rem;">Total: $0.00</div>
         <p style="font-size: 0.85rem; color: #666;">Weekend orders: allow 48hrs.<br>BMW (Germany): 2-2.5 wks.<br>Ducati (Italy): 7-10 days.</p>
-        <button class="btn" onclick="sendOrderRequest()">Send Order Request</button>
+        
+        <!-- FIX: Replaced the old button with a dynamic HTML link that bypasses Apple's PWA security -->
+        <a id="orderBtn" class="btn" style="display:block; text-align:center; text-decoration:none; box-sizing:border-box;" href="#" onclick="if(cart.length===0){alert('Your cart is empty!'); return false;}">Send Order Request</a>
+        
         <p style="font-size: 0.75rem; text-align:center; color:#888; margin-top:0.5rem;">Routes to (321) 215-2065 or Email depending on device.</p>
     </div>
 </div>
@@ -202,11 +205,13 @@
         updateCart();
     }
 
+    // FIX: This function now rebuilds the HTML link directly to bypass iOS security blocks
     function updateCart() {
         const container = document.getElementById('cartItems');
         let html = '';
         let total = 0;
         
+        // 1. Build the visual cart layout
         cart.forEach(item => {
             const price = parseFloat(item['Price']);
             const qty = item.qty || 1;
@@ -222,33 +227,31 @@
         
         container.innerHTML = html || '<p>List is empty.</p>';
         document.getElementById('cartTotal').innerText = 'Total: $' + total.toFixed(2);
-    }
 
-    function sendOrderRequest() {
-        if (cart.length === 0) return alert("Your cart is empty!");
-        
+        // 2. Build the exact text/email string for the button link
         let details = 'Hello Power Motorcycles USA, order request:\n\n';
-        let total = 0;
-        
         cart.forEach(item => {
             const qty = item.qty || 1;
             details += `- ${qty}x P/N: ${item['Part Number']} | ${item['Description']} ($${(parseFloat(item['Price']) * qty).toFixed(2)})\n`;
-            total += parseFloat(item['Price']) * qty;
         });
-        
         details += `\nTotal: $${total.toFixed(2)}\n`;
         
         const encodedDetails = encodeURIComponent(details);
         const userAgent = navigator.userAgent || navigator.vendor || window.opera;
-        
         const isIOS = /iPad|iPhone|iPod/.test(userAgent) && !window.MSStream;
         const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry/i.test(userAgent);
         
-        if (isMobile) {
-            const separator = isIOS ? '&' : '?';
-            window.location.href = `sms:3212152065${separator}body=${encodedDetails}`;
+        // 3. Inject the link directly into the HTML button
+        const orderBtn = document.getElementById('orderBtn');
+        if (cart.length > 0) {
+            if (isMobile) {
+                const separator = isIOS ? '&' : '?';
+                orderBtn.href = `sms:3212152065${separator}body=${encodedDetails}`;
+            } else {
+                orderBtn.href = `mailto:nicholas@powermotorcyclesusa.com?subject=Parts%20Order%20Request&body=${encodedDetails}`;
+            }
         } else {
-            window.location.href = `mailto:nicholas@powermotorcyclesusa.com?subject=Parts%20Order%20Request&body=${encodedDetails}`;
+            orderBtn.href = "#";
         }
     }
 
